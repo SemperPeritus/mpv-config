@@ -688,7 +688,7 @@ local thumbnailer_options = {
     autogenerate = true,
 
     -- Only automatically thumbnail videos shorter than this (seconds)
-    autogenerate_max_duration = 3600, -- 1 hour
+    autogenerate_max_duration = 10800, -- 1 hour
 
     -- SHA1-sum filenames over this length
     -- It's nice to know what files the thumbnails are (hence directory names)
@@ -774,7 +774,7 @@ local thumbnailer_options = {
     --   at most max_delta seconds apart (raising the amount if needed)
     min_delta = 5,
     -- 120 seconds aka 2 minutes will add more thumbnails when the video is over 5 hours!
-    max_delta = 90,
+    max_delta = 20,
 
 
     -- Overrides for remote urls (you generally want less thumbnails!)
