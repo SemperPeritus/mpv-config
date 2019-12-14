@@ -11,7 +11,7 @@ function isTrackLanguageIsJapanese(track) {
 function onFileLoaded() {
     var trackList = JSON.parse(mp.get_property('track-list'));
     var japaneseAudioTracks = trackList.filter(isTrackTypeIsAudio).filter(isTrackLanguageIsJapanese);
-    var propertyName = 'track-list/' + japaneseAudioTracks[0]['ff-index'] + '/selected';
+    var propertyName = japaneseAudioTracks.length > 0 ? 'track-list/' + japaneseAudioTracks[0]['ff-index'] + '/selected' : null;
     mp.msg.log('info', propertyName);
     mp.set_property(propertyName, 'yes');
 }
