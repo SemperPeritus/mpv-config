@@ -24,8 +24,12 @@ local msg = require 'mp.msg'
 local opt = require 'mp.options'
 local utils = require 'mp.utils'
 
--- Determine platform --
+-- Determine if the platform is Windows --
 ON_WINDOWS = (package.config:sub(1,1) ~= '/')
+
+-- Determine if the platform is MacOS --
+local uname = io.popen("uname -s"):read("*l")
+ON_MAC = not ON_WINDOWS and (uname == "Mac" or uname == "Darwin")
 
 -- Some helper functions needed to parse the options --
 function isempty(v) return (v == false) or (v == nil) or (v == "") or (v == 0) or (type(v) == "table" and next(v) == nil) end
@@ -143,13 +147,7 @@ function find_executable(name)
   local pwd = os.getenv("PWD") or utils.getcwd()
   local path = os.getenv("PATH")
 
-  pwd = "/opt/homebrew/bin"
-
   local env_path = pwd .. delim .. path -- Check CWD first
-
-  msg.debug("FIND EXECUTABLE", pwd)
-  msg.debug("FIND EXECUTABLE", path)
-  msg.debug("FIND EXECUTABLE", env_path)
 
   local result, filename
   for path_dir in env_path:gmatch("[^"..delim.."]+") do
@@ -167,9 +165,6 @@ local ExecutableFinder = { path_cache = {} }
 -- Searches for an executable and caches the result if any
 function ExecutableFinder:get_executable_path( name, raw_name )
   name = ON_WINDOWS and not raw_name and (name .. ".exe") or name
-
-  msg.debug("EXECUTABLE FINDER", name)
-  msg.debug("EXECUTABLE FINDER", self.path_cache)
 
   if self.path_cache[name] == nil then
     self.path_cache[name] = find_executable(name) or false
@@ -494,8 +489,6 @@ end
 function create_thumbnail_mpv(file_path, timestamp, size, output_path, options)
     options = options or {}
 
-    msg.debug("output_path MPV", output_path)
-
     local ytdl_disabled = not options.enable_ytdl and (mp.get_property_native("ytdl") == false
                                                        or thumbnailer_options.remote_direct_stream)
 
@@ -513,8 +506,10 @@ function create_thumbnail_mpv(file_path, timestamp, size, output_path, options)
 
     local log_arg = "--log-file=" .. output_path .. ".log"
 
+    local mpv_path = ON_MAC and "/opt/homebrew/bin/mpv" or "mpv"
+
     local mpv_command = skip_nil({
-        "/opt/homebrew/bin/mpv",
+        mpv_path,
         -- Hide console output
         "--msg-level=all=no",
 
@@ -557,12 +552,11 @@ end
 
 function create_thumbnail_ffmpeg(file_path, timestamp, size, output_path, options)
     options = options or {}
-
-    msg.debug("FFMPEG file_path", file_path)
-    msg.debug("FFMPEG output_path", output_path)
+    
+    local ffmpeg_path = ON_MAC and "/opt/homebrew/bin/ffmpeg" or "ffmpeg"
 
     local ffmpeg_command = {
-        "/opt/homebrew/bin/ffmpeg",
+        ffmpeg_path,
         "-loglevel", "quiet",
         "-noaccurate_seek",
         "-ss", format_time(timestamp, ":"),
@@ -582,7 +576,7 @@ function create_thumbnail_ffmpeg(file_path, timestamp, size, output_path, option
 
         "-y", output_path
     }
-    return utils.subprocess({args=ffmpeg_command, capture_stderr=true})
+    return utils.subprocess({args=ffmpeg_command})
 end
 
 
@@ -597,34 +591,6 @@ function check_output(ret, output_path, is_mpv)
             msg.error("Thumbnailing command failed!")
             msg.error("mpv process error:", ret.error)
             msg.error("Process stdout:", ret.stdout)
-            
-            for i,v in pairs(ret) do
-              msg.debug(i, v)
-            end
-
-            -- msg.debug("touch")
-            -- local args2 = {"touch", "/tmp/mpv_thumbs_cache/Kage17-1055341216/test.txt"}
-            -- local com2 = utils.subprocess({args=args2, capture_stderr=true})
-            -- for i,v in pairs(com2) do
-            --   msg.debug(i, v)
-            -- end
-
-            -- msg.debug("ffmpeg")
-            -- local args3 = {"ffmpeg",
-            --   "-loglevel", "info",
-            --   "-noaccurate_seek",
-            --   "-ss", "00:00:04.734",
-            --   "-i", "/Users/platonefimov/Downloads/Kage17.mkv",
-            --   "-frames:v", "1",
-            --   "-an",
-            --   "-vf", "scale=200:112",
-            --   "-c:v", "rawvideo",
-            --   "-pix_fmt", "bgra",
-            --   "-f", "rawvideo -y /Users/platonefimov/Downloads/Kage17.bgra"}
-            -- local com3 = utils.subprocess({args=args3, capture_stderr=true})
-            -- for i,v in pairs(com3) do
-            --   msg.debug(i, v)
-            -- end
 
             if is_mpv then
                 msg.error("Debug log:", log_path)
@@ -690,7 +656,6 @@ function do_worker_job(state_json_string, frames_json_string)
 
     local thumbnail_func = create_thumbnail_mpv
     if not thumbnailer_options.prefer_mpv then
-        msg.debug("NOT prefer MPV")
         if ExecutableFinder:get_executable_path("ffmpeg") then
             thumbnail_func = create_thumbnail_ffmpeg
         else
@@ -738,14 +703,9 @@ function do_worker_job(state_json_string, frames_json_string)
             thumbnail_file:close()
         end
 
-        msg.debug("atlas_path", atlas_path)
-        msg.debug("need_thumbnail_generation", need_thumbnail_generation)
-        msg.debug("thumb_state.storyboard", thumb_state.storyboard)
-
         if need_thumbnail_generation then
             local success
             if thumb_state.storyboard ~= nil then
-                msg.debug("storyboard TRUE")
                 -- get atlas and then split it into thumbnails
                 local rows = thumb_state.storyboard.rows
                 local cols = thumb_state.storyboard.cols
@@ -768,7 +728,6 @@ function do_worker_job(state_json_string, frames_json_string)
                     os.remove(atlas_path)
                 end
             else
-                msg.debug("storyboard FALSE")
                 local ret = thumbnail_func(file_path, timestamp, thumb_state.thumbnail_size, thumbnail_path, thumb_state.worker_extra)
                 success = check_output(ret, thumbnail_path, thumbnail_func == create_thumbnail_mpv)
             end
