@@ -10,19 +10,6 @@ License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ]]
 
-function dump(o)
-    if type(o) == 'table' then
-       local s = '{ '
-       for k,v in pairs(o) do
-          if type(k) ~= 'number' then k = '"'..k..'"' end
-          s = s .. '['..k..'] = ' .. dump(v) .. ','
-       end
-       return s .. '} '
-    else
-       return tostring(o)
-    end
- end
-
 local options = {
     -- Socket path (leave empty for auto)
     socket = "",
@@ -70,7 +57,6 @@ local options = {
 mp.utils = require "mp.utils"
 mp.options = require "mp.options"
 mp.options.read_options(options, "thumbfast")
-mp.msg = require "mp.msg"
 
 local properties = {}
 local pre_0_30_0 = mp.command_native_async == nil
@@ -81,10 +67,12 @@ function subprocess(args, async, callback)
     callback = callback or function() end
 
     if not pre_0_30_0 then
+        -- FIXME: figure out which exact env var needs to be stripped. (PR: #144, Issue: #106 and #139)
+        local env = os_name == "darwin" and "PATH="..os.getenv("PATH") or nil
         if async then
-            return mp.command_native_async({name = "subprocess", playback_only = true, args = args}, callback)
+            return mp.command_native_async({name = "subprocess", playback_only = true, args = args, env = env}, callback)
         else
-            return mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true, args = args})
+            return mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true, args = args, env = env})
         end
     else
         if async then
@@ -299,7 +287,6 @@ end
 if mpv_path == "mpv" and os_name == "darwin" and unique then
     -- TODO: look into ~~osxbundle/
     mpv_path = string.gsub(subprocess({"ps", "-o", "comm=", "-p", tostring(unique)}).stdout, "[\n\r]", "")
-    mpv_path = string.gsub(mpv_path, "/mpv%-bundle$", "/mpv")
     if mpv_path ~= "mpv" then
         mpv_path = string.gsub(mpv_path, "/mpv%-bundle$", "/mpv")
         local mpv_bin = mp.utils.file_info("/usr/local/mpv")
@@ -482,11 +469,8 @@ local function spawn(time)
         "--vf="..vf_string(filters_all, true),
         "--sws-scaler=fast-bilinear",
         "--video-rotate="..last_rotate,
-        "--ovc=rawvideo", "--of=image2", "--ofopts=update=1", "--macos-app-activation-policy=accessory", "--o="..options.thumbnail
+        "--ovc=rawvideo", "--of=image2", "--ofopts=update=1", "--o="..options.thumbnail
     }
-    mp.msg.info("mpv_path", mpv_path)
-    mp.msg.info("args", args)
-    mp.msg.info("args", dump(args))
 
     if not pre_0_30_0 then
         table.insert(args, "--sws-allow-zimg=no")
@@ -496,8 +480,7 @@ local function spawn(time)
         table.insert(args, "--media-controls=no")
     end
 
-    -- if os_name == "darwin" and properties["macos-app-activation-policy"] then
-    if os_name == "darwin" then
+    if os_name == "darwin" and properties["macos-app-activation-policy"] then
         table.insert(args, "--macos-app-activation-policy=accessory")
     end
 

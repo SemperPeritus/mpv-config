@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Detach the headless thumbnail encoder from mpv.app. Otherwise macOS can
+# inherit the foreground LaunchServices state and show a generic exec icon.
+worker=/opt/homebrew/opt/mpv/bin/mpv
+
+if [ ! -x "$worker" ]; then
+    exit 127
+fi
+
+if [ "${1-}" = "--run-as-launchd-job" ]; then
+    label=$2
+    shift 2
+
+    "$worker" "$@"
+    status=$?
+    /bin/launchctl remove "$label" >/dev/null 2>&1 || true
+    exit "$status"
+fi
+
+label="local.thumbfast-worker.$$"
+exec /bin/launchctl submit -l "$label" -o /dev/null -e /dev/null -- \
+    "$0" --run-as-launchd-job "$label" "$@"
